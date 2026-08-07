@@ -1,0 +1,38 @@
+name: CI
+
+# Lightweight checks for pull requests and pushes to main. Runs on macOS because the iOS
+# (Kotlin/Native) targets can only be built there.
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Tests (JVM + iOS simulator)
+        run: ./gradlew :kaptor-core:jvmTest :kaptor-core:iosSimulatorArm64Test --stacktrace
+
+      - name: Publish dry-run (compiles all targets, validates publishing)
+        run: ./gradlew publishToMavenLocal --no-configuration-cache --stacktrace
+
+      - name: Smoke-build the Android sample
+        run: ./gradlew :sample-android:assembleDebug --stacktrace

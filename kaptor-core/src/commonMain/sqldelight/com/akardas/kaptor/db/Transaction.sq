@@ -1,0 +1,83 @@
+import kotlin.Boolean;
+
+CREATE TABLE HttpTransactionEntity (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    requestDate INTEGER,
+    responseDate INTEGER,
+    tookMs INTEGER,
+    protocol TEXT,
+    method TEXT,
+    url TEXT,
+    host TEXT,
+    path TEXT,
+    scheme TEXT,
+    requestContentType TEXT,
+    requestContentLength INTEGER,
+    requestHeaders TEXT,
+    requestBody TEXT,
+    requestBodyIsPlainText INTEGER AS Boolean NOT NULL DEFAULT 1,
+    responseCode INTEGER,
+    responseMessage TEXT,
+    responseContentType TEXT,
+    responseContentLength INTEGER,
+    responseHeaders TEXT,
+    responseBody TEXT,
+    responseBodyIsPlainText INTEGER AS Boolean NOT NULL DEFAULT 1,
+    error TEXT,
+    status TEXT NOT NULL
+);
+
+CREATE INDEX transaction_request_date ON HttpTransactionEntity(requestDate);
+
+insert:
+INSERT INTO HttpTransactionEntity (
+    requestDate, method, url, host, path, scheme, protocol,
+    requestContentType, requestContentLength, requestHeaders,
+    requestBody, requestBodyIsPlainText, status
+)
+VALUES (
+    :requestDate, :method, :url, :host, :path, :scheme, :protocol,
+    :requestContentType, :requestContentLength, :requestHeaders,
+    :requestBody, :requestBodyIsPlainText, :status
+);
+
+lastInsertRowId:
+SELECT last_insert_rowid();
+
+updateResponse:
+UPDATE HttpTransactionEntity
+SET responseDate = :responseDate,
+    tookMs = :tookMs,
+    protocol = :protocol,
+    responseCode = :responseCode,
+    responseMessage = :responseMessage,
+    responseContentType = :responseContentType,
+    responseContentLength = :responseContentLength,
+    responseHeaders = :responseHeaders,
+    responseBody = :responseBody,
+    responseBodyIsPlainText = :responseBodyIsPlainText,
+    status = :status
+WHERE id = :id;
+
+updateError:
+UPDATE HttpTransactionEntity
+SET error = :error,
+    tookMs = :tookMs,
+    responseDate = :responseDate,
+    status = :status
+WHERE id = :id;
+
+selectAll:
+SELECT * FROM HttpTransactionEntity ORDER BY id DESC;
+
+selectById:
+SELECT * FROM HttpTransactionEntity WHERE id = :id;
+
+deleteById:
+DELETE FROM HttpTransactionEntity WHERE id = :id;
+
+clear:
+DELETE FROM HttpTransactionEntity;
+
+deleteOlderThan:
+DELETE FROM HttpTransactionEntity WHERE requestDate < :threshold;
