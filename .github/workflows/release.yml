@@ -45,12 +45,21 @@ jobs:
             echo "VERSION_NAME=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)" >> "$GITHUB_ENV"
           fi
 
+      - name: Decode signing key
+        # SIGNING_KEY_B64 is the ASCII-armored key, base64-encoded to a single line (multiline
+        # secrets get mangled in transport). Decode into a multiline env var via a heredoc.
+        run: |
+          {
+            echo "ORG_GRADLE_PROJECT_signingInMemoryKey<<KAPTOR_KEY_EOF"
+            echo "${{ secrets.SIGNING_KEY_B64 }}" | base64 --decode
+            echo "KAPTOR_KEY_EOF"
+          } >> "$GITHUB_ENV"
+
       - name: Publish and release to Maven Central
         run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache --stacktrace
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
           ORG_GRADLE_PROJECT_VERSION_NAME: ${{ env.VERSION_NAME }}
 
