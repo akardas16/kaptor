@@ -80,6 +80,10 @@ class FakeTransactionRepository : TransactionRepository {
         state.value = state.value.filter { (it.requestDate ?: 0) >= threshold }
     }
 
+    override suspend fun retainLatest(count: Int) {
+        state.value = state.value.sortedByDescending { it.id }.take(count)
+    }
+
     private inline fun mutate(id: Long, transform: (HttpTransaction) -> HttpTransaction) {
         state.value = state.value.map { if (it.id == id) transform(it) else it }
     }

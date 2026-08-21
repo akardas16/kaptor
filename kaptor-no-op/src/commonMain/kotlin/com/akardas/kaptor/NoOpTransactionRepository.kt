@@ -25,6 +25,7 @@ class NoOpTransactionRepository : TransactionRepository {
     override suspend fun delete(id: Long) = Unit
     override suspend fun clear() = Unit
     override suspend fun deleteOlderThan(threshold: Long) = Unit
+    override suspend fun retainLatest(count: Int) = Unit
 
     private companion object {
         const val NO_OP_ID = -1L

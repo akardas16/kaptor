@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="Kaptor" width="100%">
+</p>
+
 # Kaptor
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.akardas16/kaptor-core)](https://central.sonatype.com/artifact/io.github.akardas16/kaptor-core)
@@ -26,6 +30,10 @@ Compose Multiplatform UI shared across both platforms.
 - **JSON viewer** — syntax-highlighted pretty-print, collapsible tree, and copy-to-clipboard.
 - **Response search** — match count with prev/next navigation, scroll-to-match, and active-match
   highlighting — usable on very long bodies.
+- **Header redaction** — name sensitive headers (`Authorization`, `Cookie`, …) and their values are
+  scrubbed *before* anything is stored, displayed, or shared.
+- **Retention limits** — cap captured traffic by age (`retentionPeriodMillis`) and/or count
+  (`maxStoredTransactions`); the store prunes itself as new requests arrive.
 - **Share** a transaction as **text**, **cURL**, or a **file**.
 - **Mock requests** — fire scripted test traffic from a **+** sheet, so you can exercise the
   inspector without leaving it (host-supplied, engine-agnostic).
@@ -73,12 +81,12 @@ variant automatically:
 
 ```kotlin
 dependencies {
-    implementation("io.github.akardas16:kaptor-core:0.1.0")   // plugin + model + store
-    implementation("io.github.akardas16:kaptor-ui:0.1.0")     // Compose inspector UI
-    implementation("io.github.akardas16:kaptor-android:0.1.0") // Android notification launcher (optional)
+    implementation("io.github.akardas16:kaptor-core:0.2.0")   // plugin + model + store
+    implementation("io.github.akardas16:kaptor-ui:0.2.0")     // Compose inspector UI
+    implementation("io.github.akardas16:kaptor-android:0.2.0") // Android notification launcher (optional)
 
     // Release builds: keep the plugin installed with zero overhead.
-    releaseImplementation("io.github.akardas16:kaptor-no-op:0.1.0")
+    releaseImplementation("io.github.akardas16:kaptor-no-op:0.2.0")
 }
 ```
 
@@ -86,7 +94,7 @@ Or with a version catalog (`libs.versions.toml`):
 
 ```toml
 [versions]
-kaptor = "0.1.0"
+kaptor = "0.2.0"
 [libraries]
 kaptor-core    = { module = "io.github.akardas16:kaptor-core", version.ref = "kaptor" }
 kaptor-ui      = { module = "io.github.akardas16:kaptor-ui", version.ref = "kaptor" }
@@ -107,6 +115,13 @@ val client = HttpClient(OkHttp /* or Darwin on iOS */) {
         repository = repository
         maxContentLength = 250_000        // bodies larger than this aren't captured
         // filter = { it.url.host != "metrics.internal" }   // optional
+
+        // Scrub secrets before anything is stored/shared (case-insensitive):
+        redactHeaders = setOf("Authorization", "Cookie", "Set-Cookie")
+
+        // Bound how much captured traffic accumulates on disk (both optional):
+        retentionPeriodMillis = 24 * 60 * 60 * 1000L   // prune anything older than 24h
+        maxStoredTransactions = 500                    // keep only the newest 500
     }
 }
 
@@ -218,10 +233,10 @@ Artifacts are published with the [vanniktech maven-publish plugin](https://vanni
 under the coordinates in `gradle.properties` (`GROUP` / `VERSION_NAME`):
 
 ```
-io.github.akardas16:kaptor-core:0.1.0
-io.github.akardas16:kaptor-ui:0.1.0
-io.github.akardas16:kaptor-android:0.1.0
-io.github.akardas16:kaptor-no-op:0.1.0
+io.github.akardas16:kaptor-core:0.2.0
+io.github.akardas16:kaptor-ui:0.2.0
+io.github.akardas16:kaptor-android:0.2.0
+io.github.akardas16:kaptor-no-op:0.2.0
 ```
 
 > Replace `akardas` in `gradle.properties` (GROUP + POM url/scm/developer) with your own GitHub
@@ -274,7 +289,6 @@ show an "encoded body" note.
 
 - multipart / form-data body rendering
 - charset handling beyond UTF-8
-- retention limits (auto-prune old transactions)
 - streaming request-body capture (currently skipped to avoid consuming the source)
 - Swift Package / CocoaPods distribution of the iOS framework (Gradle/KMP consumers are supported today)
 

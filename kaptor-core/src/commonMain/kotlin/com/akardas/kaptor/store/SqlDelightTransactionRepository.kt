@@ -97,6 +97,10 @@ class SqlDelightTransactionRepository(
     override suspend fun deleteOlderThan(threshold: Long): Unit = withContext(ioDispatcher) {
         queries.deleteOlderThan(threshold)
     }
+
+    override suspend fun retainLatest(count: Int): Unit = withContext(ioDispatcher) {
+        queries.retainLatest(count.toLong())
+    }
 }
 
 private fun HttpTransactionEntity.toDomain(): HttpTransaction = HttpTransaction(

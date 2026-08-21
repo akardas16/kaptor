@@ -34,6 +34,9 @@ interface TransactionRepository {
 
     /** Removes transactions whose request date is older than [threshold] (epoch millis). */
     suspend fun deleteOlderThan(threshold: Long)
+
+    /** Keeps only the [count] most recent transactions, deleting any older ones beyond that. */
+    suspend fun retainLatest(count: Int)
 }
 
 /** The data captured when a request is sent. */

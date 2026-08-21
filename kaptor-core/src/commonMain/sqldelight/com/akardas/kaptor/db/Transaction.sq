@@ -81,3 +81,9 @@ DELETE FROM HttpTransactionEntity;
 
 deleteOlderThan:
 DELETE FROM HttpTransactionEntity WHERE requestDate < :threshold;
+
+retainLatest:
+DELETE FROM HttpTransactionEntity
+WHERE id NOT IN (
+    SELECT id FROM HttpTransactionEntity ORDER BY id DESC LIMIT :count
+);

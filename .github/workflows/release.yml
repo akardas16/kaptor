@@ -6,7 +6,8 @@ name: Release
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   MAVEN_CENTRAL_USERNAME   - Sonatype Central Portal token username
 #   MAVEN_CENTRAL_PASSWORD   - Sonatype Central Portal token password
-#   SIGNING_KEY              - ASCII-armored GPG private key (the whole block)
+#   SIGNING_KEY_B64          - ASCII-armored GPG private key, base64-encoded to a single line
+#                              (`base64 < key.asc | pbcopy`); decoded by the "Decode signing key" step
 #   SIGNING_PASSWORD         - passphrase for that GPG key
 
 on:

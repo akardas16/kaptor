@@ -22,13 +22,46 @@ class KaptorConfig {
 
     /**
      * Bodies larger than this (bytes) are not captured, to avoid holding large downloads in
-     * memory. Non-textual bodies are never captured regardless of size.
+     * memory. Enforced whether or not the server sends a `Content-Length` (chunked/streamed
+     * responses included). Non-textual bodies are never captured regardless of size.
      */
     var maxContentLength: Long = 250_000L
 
     /** Optional filter; return `false` to skip capturing a given request entirely. */
     var filter: ((HttpRequestBuilder) -> Boolean)? = null
+
+    /**
+     * Header names (case-insensitive) whose values are replaced with a redaction marker before
+     * anything is stored, displayed, or shared — so secrets like `Authorization` or `Cookie`
+     * never touch the on-disk store. Applies to both request and response headers.
+     *
+     * ```
+     * redactHeaders = setOf("Authorization", "Cookie", "Set-Cookie")
+     * ```
+     */
+    var redactHeaders: Set<String> = emptySet()
+
+    /**
+     * When set, transactions older than this many milliseconds are pruned as new ones arrive.
+     * `null` (default) keeps them indefinitely (subject to [maxStoredTransactions]).
+     */
+    var retentionPeriodMillis: Long? = null
+
+    /**
+     * When set, only this many most-recent transactions are kept; older ones are pruned as new
+     * ones arrive. `null` (default) imposes no count limit — combine with [retentionPeriodMillis]
+     * to bound how much captured traffic accumulates on disk.
+     */
+    var maxStoredTransactions: Int? = null
 }
+
+/** Replaces every value whose header name is in [names] (already lowercased) with a marker. */
+private fun List<HttpHeader>.redacting(names: Set<String>): List<HttpHeader> {
+    if (names.isEmpty()) return this
+    return map { if (it.name.lowercase() in names) HttpHeader(it.name, REDACTED_VALUE) else it }
+}
+
+private const val REDACTED_VALUE = "██ redacted ██"
 
 /**
  * A Ktor client plugin that records every request/response into a [TransactionRepository],
@@ -48,6 +81,9 @@ val Kaptor = createClientPlugin("Kaptor", ::KaptorConfig) {
     }
     val maxContentLength = pluginConfig.maxContentLength
     val filter = pluginConfig.filter
+    val redactHeaders = pluginConfig.redactHeaders.map { it.lowercase() }.toSet()
+    val retentionPeriodMillis = pluginConfig.retentionPeriodMillis
+    val maxStoredTransactions = pluginConfig.maxStoredTransactions
 
     on(Send) { request ->
         if (filter != null && !filter(request)) {
@@ -69,11 +105,13 @@ val Kaptor = createClientPlugin("Kaptor", ::KaptorConfig) {
                 protocol = null,
                 contentType = requestBody?.contentType?.toString(),
                 contentLength = requestBody?.contentLength,
-                headers = mergeHeaders(request.headers.build(), requestBody),
+                headers = mergeHeaders(request.headers.build(), requestBody).redacting(redactHeaders),
                 body = reqBodyText,
                 bodyIsPlainText = reqIsText,
             ),
         )
+
+        prune(repository, retentionPeriodMillis, maxStoredTransactions)
 
         val startedAt = currentEpochMillis()
         val call: HttpClientCall = try {
@@ -87,8 +125,18 @@ val Kaptor = createClientPlugin("Kaptor", ::KaptorConfig) {
             throw cause
         }
 
-        recordResponse(repository, transactionId, startedAt, call, maxContentLength)
+        recordResponse(repository, transactionId, startedAt, call, maxContentLength, redactHeaders)
     }
+}
+
+/** Applies the configured retention limits, dropping transactions beyond age/count bounds. */
+private suspend fun prune(
+    repository: TransactionRepository,
+    retentionPeriodMillis: Long?,
+    maxStoredTransactions: Int?,
+) {
+    retentionPeriodMillis?.let { repository.deleteOlderThan(currentEpochMillis() - it) }
+    maxStoredTransactions?.let { repository.retainLatest(it) }
 }
 
 /**
@@ -101,21 +149,29 @@ private suspend fun recordResponse(
     startedAt: Long,
     call: HttpClientCall,
     maxContentLength: Long,
+    redactHeaders: Set<String>,
 ): HttpClientCall {
     val response = call.response
     val contentType = response.headers[io.ktor.http.HttpHeaders.ContentType]
     val contentEncoding = response.headers[io.ktor.http.HttpHeaders.ContentEncoding]
     val contentLength = response.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
     val textual = isTextual(contentType)
-    val withinCap = contentLength == null || contentLength <= maxContentLength
+    // A declared oversized body is skipped up front so we never buffer it at all.
+    val declaredOversize = contentLength != null && contentLength > maxContentLength
 
     // `save()` buffers the body in memory so both the inspector and the caller can read it. We
     // read the RAW bytes (before Ktor's own ContentEncoding decoding, if any) and decode them
     // ourselves, so compressed bodies are captured correctly regardless of client config.
-    val (returnedCall, body, bodyIsText) = if (textual && withinCap) {
+    val (returnedCall, body, bodyIsText) = if (textual && !declaredOversize) {
         val saved = call.save()
         val raw = runCatching { saved.response.readRawBytes() }.getOrNull()
-        val decoded = raw?.let { ContentDecoder.decode(contentEncoding, it) }
+        // Chunked/streamed responses carry no Content-Length, so enforce the cap on the bytes we
+        // actually read — otherwise a large streamed body would be stored in full.
+        val decoded = when {
+            raw == null -> null
+            raw.size > maxContentLength -> null
+            else -> ContentDecoder.decode(contentEncoding, raw)
+        }
         Triple(saved, decoded?.text, decoded?.isPlainText ?: false)
     } else {
         Triple(call, null, false)
@@ -131,7 +187,7 @@ private suspend fun recordResponse(
             message = response.status.description,
             contentType = contentType,
             contentLength = contentLength,
-            headers = response.headers.toHttpHeaders(),
+            headers = response.headers.toHttpHeaders().redacting(redactHeaders),
             body = body,
             bodyIsPlainText = bodyIsText,
         ),
